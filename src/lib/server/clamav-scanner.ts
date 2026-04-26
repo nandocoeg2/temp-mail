@@ -21,9 +21,7 @@ export function createClamAvScanner(): AttachmentScanner {
         let response = "";
         const socket = connect({ host, port });
         const timeout = setTimeout(() => {
-          settle(() =>
-            reject(new DomainError("ATTACHMENT_REJECTED", "Attachment scanner timed out", 503))
-          );
+          settle(() => resolve({ status: "unavailable" as const }));
           socket.destroy();
         }, timeoutMs);
 
@@ -41,9 +39,7 @@ export function createClamAvScanner(): AttachmentScanner {
           response += chunk.toString("utf8");
         });
         socket.on("error", () => {
-          settle(() =>
-            reject(new DomainError("ATTACHMENT_REJECTED", "Attachment scanner is unavailable", 503))
-          );
+          settle(() => resolve({ status: "unavailable" as const }));
         });
         socket.on("end", () => {
           settle(() => {

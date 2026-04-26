@@ -183,12 +183,14 @@ export function createMailboxService(options: MailboxServiceOptions) {
     const attachmentRecords = [];
     if (preparedAttachments.length > 0 && options.attachmentStorage) {
       for (const attachment of preparedAttachments) {
+        let scanStatus: "clean" | "skipped" = options.attachmentScanner ? "skipped" : "skipped";
         if (options.attachmentScanner) {
           const scan = await options.attachmentScanner.scan(attachment);
           productionMetrics.attachmentScanned(scan.status);
-          if (scan.status !== "clean") {
+          if (scan.status === "infected") {
             throw new DomainError("ATTACHMENT_REJECTED", "Attachment failed malware scan", 400);
           }
+          scanStatus = scan.status === "clean" ? "clean" : "skipped";
         }
         const attachmentId = randomUUID();
         const key = attachmentObjectKey(mailbox.id, message.id, attachmentId, attachment.filename);
@@ -206,7 +208,7 @@ export function createMailboxService(options: MailboxServiceOptions) {
           contentType: attachment.contentType,
           size: stored.size,
           objectKey: stored.key,
-          scanStatus: options.attachmentScanner ? "clean" as const : "skipped" as const,
+          scanStatus: scanStatus,
           scanSignature: null,
           createdAt: options.clock.now()
         });

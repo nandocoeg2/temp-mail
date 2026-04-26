@@ -6,7 +6,18 @@ const ALLOWED_ATTACHMENT_TYPES = new Set([
   "application/pdf",
   "image/jpeg",
   "image/png",
-  "text/plain"
+  "image/gif",
+  "image/webp",
+  "text/plain",
+  "text/html",
+  "text/csv",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/zip",
+  "application/x-zip-compressed",
+  "application/octet-stream"
 ]);
 
 export type InboundAttachmentInput = {
@@ -23,7 +34,8 @@ export type PreparedAttachment = {
 
 export type AttachmentScanResult =
   | { status: "clean" }
-  | { status: "infected"; signature: string };
+  | { status: "infected"; signature: string }
+  | { status: "unavailable" };
 
 export type AttachmentScanner = {
   scan: (attachment: PreparedAttachment) => Promise<AttachmentScanResult>;
