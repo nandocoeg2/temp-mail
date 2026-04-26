@@ -38,9 +38,7 @@ type AdminDashboardProps = {
 };
 
 const domains = [
-  { name: "dropmail.app", mx: "Healthy", dkim: "Aligned", load: "41%" },
-  { name: "dropmail.dev", mx: "Degraded", dkim: "Aligned", load: "68%" },
-  { name: "dropmail.net", mx: "Healthy", dkim: "Pending", load: "37%" }
+  { name: "fjulian.space", mx: "Healthy", dkim: "Aligned", load: "100%" },
 ];
 
 export function AdminDashboard({ metrics }: AdminDashboardProps) {

@@ -6,7 +6,7 @@
   "workers_dev": false,
   "preview_urls": false,
   "vars": {
-    "APP_INBOUND_URL": "https://fjulian.space/api/inbound/email",
+    "APP_INBOUND_URL": "https://mail.fjulian.space/api/inbound/email",
     "MAX_EMAIL_BYTES": "8388608"
   },
   "secrets": {

@@ -1,4 +1,4 @@
-const abuseContactEmail = process.env.ABUSE_CONTACT_EMAIL ?? "abuse@dropmail.local";
+const abuseContactEmail = process.env.ABUSE_CONTACT_EMAIL ?? "abuse@fjulian.space";
 
 const reportDetails = [
   "The DropMail address involved.",

@@ -63,7 +63,7 @@ type UiState = "idle" | "loading" | "rate_limited" | "error";
 const fallbackMailbox = (): Mailbox => ({
   id: "local-pending",
   token: "",
-  address: "creating@dropmail.local",
+  address: "creating@fjulian.space",
   expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
   status: "loading"
 });
@@ -231,6 +231,15 @@ export function InboxClient({ initialMailbox, initialMessages = [] }: InboxClien
     const interval = window.setInterval(() => setNowTick(Date.now()), 1000);
     return () => window.clearInterval(interval);
   }, []);
+
+  // Auto-poll inbox every 5 seconds
+  useEffect(() => {
+    if (!mailbox.id || mailbox.id === "local-pending" || expired) return;
+    const poll = window.setInterval(() => {
+      void refreshInbox();
+    }, 5000);
+    return () => window.clearInterval(poll);
+  }, [mailbox.id, expired, refreshInbox]);
 
   useEffect(() => {
     if (!initialMailbox || mailbox.status === "loading") {

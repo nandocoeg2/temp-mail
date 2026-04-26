@@ -4,7 +4,7 @@ async function getInitialMailbox(): Promise<{ mailbox: Mailbox; messages: InboxM
   const fallback: Mailbox = {
     id: "initial-local",
     token: "",
-    address: "new@dropmail.local",
+    address: "new@fjulian.space",
     expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
     status: "loading"
   };
