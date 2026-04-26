@@ -4,6 +4,7 @@ import { createClamAvScanner } from "./clamav-scanner";
 import { systemClock } from "./clock";
 import { createInMemoryRepository } from "./in-memory-repository";
 import { createMailboxService } from "./mailbox-service";
+import { productionMetrics } from "./metrics";
 import { createS3AttachmentStorage } from "./object-storage";
 import { createPrismaRepository } from "./prisma-repository";
 import type { MailboxRepository } from "./types";
@@ -41,6 +42,7 @@ export function getRepository(): MailboxRepository {
     globalState.__dropmail!.repository = createInMemoryRepository(systemClock);
   }
 
+  productionMetrics.setRepository(globalState.__dropmail!.repository);
   return globalState.__dropmail!.repository;
 }
 

@@ -121,6 +121,37 @@ export function createInMemoryRepository(clock: Clock): MailboxRepository {
     },
     async countMessages() {
       return messages.size;
+    },
+    async countActiveMailboxes() {
+      const now = new Date();
+      return [...mailboxes.values()].filter(m => m.expiresAt > now).length;
+    },
+    async countAttachments() {
+      return attachments.size;
+    },
+    async countMailboxesByDomain() {
+      const counts = new Map<string, number>();
+      for (const m of mailboxes.values()) {
+        const domain = m.address.split("@")[1] || "unknown";
+        counts.set(domain, (counts.get(domain) ?? 0) + 1);
+      }
+      return [...counts.entries()].map(([domain, count]) => ({ domain, count }));
+    },
+    async countMessagesByDomain() {
+      const counts = new Map<string, number>();
+      for (const m of messages.values()) {
+        const domain = m.recipient.split("@")[1] || "unknown";
+        counts.set(domain, (counts.get(domain) ?? 0) + 1);
+      }
+      return [...counts.entries()].map(([domain, count]) => ({ domain, count }));
+    },
+    async countMessagesBySenderDomain() {
+      const counts = new Map<string, number>();
+      for (const m of messages.values()) {
+        const domain = m.sender.split("@")[1] || "unknown";
+        counts.set(domain, (counts.get(domain) ?? 0) + 1);
+      }
+      return [...counts.entries()].map(([domain, count]) => ({ domain, count }));
     }
   };
 }

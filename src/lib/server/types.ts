@@ -77,6 +77,11 @@ export type MailboxRepository = {
   listRateLimitEvents: (limit: number) => Promise<RateLimitEventRecord[]>;
   countMailboxes: () => Promise<number>;
   countMessages: () => Promise<number>;
+  countActiveMailboxes: () => Promise<number>;
+  countAttachments: () => Promise<number>;
+  countMailboxesByDomain: () => Promise<{ domain: string; count: number }[]>;
+  countMessagesByDomain: () => Promise<{ domain: string; count: number }[]>;
+  countMessagesBySenderDomain: () => Promise<{ domain: string; count: number }[]>;
 };
 
 export type MailboxSummary = {

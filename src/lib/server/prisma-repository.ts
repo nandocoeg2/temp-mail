@@ -172,6 +172,30 @@ export function createPrismaRepository(prisma: PrismaClient): MailboxRepository 
     },
     async countMessages() {
       return prisma.message.count();
+    },
+    async countActiveMailboxes() {
+      return prisma.mailbox.count({ where: { expiresAt: { gt: new Date() } } });
+    },
+    async countAttachments() {
+      return prisma.attachment.count();
+    },
+    async countMailboxesByDomain() {
+      const rows = await prisma.$queryRaw<{ domain: string; count: bigint }[]>`
+        SELECT split_part(address, '@', 2) AS domain, COUNT(*)::bigint AS count
+        FROM mailboxes GROUP BY domain`;
+      return rows.map(r => ({ domain: r.domain, count: Number(r.count) }));
+    },
+    async countMessagesByDomain() {
+      const rows = await prisma.$queryRaw<{ domain: string; count: bigint }[]>`
+        SELECT split_part(recipient, '@', 2) AS domain, COUNT(*)::bigint AS count
+        FROM messages GROUP BY domain`;
+      return rows.map(r => ({ domain: r.domain, count: Number(r.count) }));
+    },
+    async countMessagesBySenderDomain() {
+      const rows = await prisma.$queryRaw<{ domain: string; count: bigint }[]>`
+        SELECT split_part(sender, '@', 2) AS domain, COUNT(*)::bigint AS count
+        FROM messages GROUP BY domain ORDER BY count DESC`;
+      return rows.map(r => ({ domain: r.domain, count: Number(r.count) }));
     }
   };
 }

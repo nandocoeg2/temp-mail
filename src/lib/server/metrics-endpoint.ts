@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { productionMetrics } from "./metrics";
+import { getRepository } from "./service-provider";
 
 export async function metricsResponse(request: Request): Promise<Response> {
   if (!isMetricsAuthorized(request)) {
@@ -11,6 +12,9 @@ export async function metricsResponse(request: Request): Promise<Response> {
       }
     });
   }
+
+  // Ensure repository is initialized for DB-backed metrics
+  getRepository();
 
   return new Response(await productionMetrics.render(), {
     headers: {
