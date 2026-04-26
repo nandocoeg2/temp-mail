@@ -28,7 +28,7 @@ describe("mailbox service", () => {
     });
   });
 
-  it("extends active mailbox expiry and rejects extension after expiry", async () => {
+  it("creates a fixed one hour mailbox and rejects extension attempts", async () => {
     const clock = fixedClock("2026-04-26T10:00:00.000Z");
     const service = createMailboxService({
       repository: createInMemoryRepository(clock),
@@ -37,12 +37,9 @@ describe("mailbox service", () => {
     });
     const mailbox = await service.createMailbox("203.0.113.10");
 
-    const extended = await service.extendMailbox(mailbox.id, mailbox.token);
-
-    expect(extended.expiresAt.toISOString()).toBe("2026-04-26T10:20:00.000Z");
-    advanceClock(clock, 21 * 60 * 1000);
+    expect(mailbox.expiresAt.toISOString()).toBe("2026-04-26T11:00:00.000Z");
     await expect(service.extendMailbox(mailbox.id, mailbox.token)).rejects.toMatchObject({
-      code: "MAILBOX_EXPIRED"
+      code: "EXTEND_DISABLED"
     });
   });
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Specialist Roundtable"
+  short_description: "Coordinate multi-specialist project workflows."
+  default_prompt: "Use $specialist-roundtable to run a structured specialist discussion for this task."

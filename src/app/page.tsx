@@ -22,7 +22,12 @@ export default async function Home() {
           <span>DM</span>
           <strong>DropMail</strong>
         </div>
-        <a href="/admin" className="admin-link">Admin</a>
+        <nav style={{ display: "flex", gap: "10px", flexWrap: "wrap", justifyContent: "flex-end" }} aria-label="Public navigation">
+          <a href="/privacy" className="admin-link">Privacy</a>
+          <a href="/terms" className="admin-link">Terms</a>
+          <a href="/abuse" className="admin-link">Abuse</a>
+          <a href="/admin" className="admin-link">Admin</a>
+        </nav>
       </header>
 
       <section className="public-intro">
@@ -30,7 +35,7 @@ export default async function Home() {
           <span className="eyebrow">Temporary email</span>
           <h1>Receive mail without handing over your real inbox.</h1>
         </div>
-        <p>DropMail creates a disposable mailbox, keeps it live for a short window, and lets you copy one-time codes or links as they arrive.</p>
+        <p>DropMail creates a disposable mailbox, targets a fixed 1-hour receiving window, and lets you copy one-time codes or links as they arrive.</p>
       </section>
 
       <InboxClient initialMailbox={mailbox} initialMessages={messages} />

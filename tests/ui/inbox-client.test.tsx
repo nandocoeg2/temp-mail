@@ -46,6 +46,58 @@ describe("InboxClient", () => {
     expect(screen.getByText("Waiting for incoming mail")).toBeInTheDocument();
   });
 
+  it("does not expose mailbox extension controls in production UI", () => {
+    render(
+      <InboxClient
+        initialMailbox={{
+          id: "box-1",
+          token: "token",
+          address: "abc123@dropmail.test",
+          expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+          status: "active"
+        }}
+        initialMessages={[]}
+      />
+    );
+
+    expect(screen.queryByRole("button", { name: /extend/i })).not.toBeInTheDocument();
+  });
+
+  it("renders clean attachment download actions in message detail", () => {
+    render(
+      <InboxClient
+        initialMailbox={{
+          id: "box-1",
+          token: "token",
+          address: "abc123@dropmail.test",
+          expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+          status: "active"
+        }}
+        initialMessages={[
+          {
+            id: "message-1",
+            sender: "sender@example.com",
+            subject: "Document",
+            receivedAt: new Date().toISOString(),
+            bodyText: "Attached",
+            attachments: [
+              {
+                id: "attachment-1",
+                filename: "code.txt",
+                contentType: "text/plain",
+                size: 12,
+                scanStatus: "clean"
+              }
+            ]
+          }
+        ]}
+      />
+    );
+
+    expect(screen.getByText("code.txt")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /download code\.txt/i })).toBeEnabled();
+  });
+
   it("switches to expired state when mailbox is expired", async () => {
     render(
       <InboxClient

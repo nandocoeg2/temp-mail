@@ -7,7 +7,11 @@ export type DomainErrorCode =
   | "VALIDATION_FAILED"
   | "WEBHOOK_UNAUTHORIZED"
   | "WEBHOOK_NOT_CONFIGURED"
-  | "PAYLOAD_TOO_LARGE";
+  | "PAYLOAD_TOO_LARGE"
+  | "EXTEND_DISABLED"
+  | "ATTACHMENT_REJECTED"
+  | "ATTACHMENT_NOT_FOUND"
+  | "ATTACHMENT_UNAVAILABLE";
 
 export class DomainError extends Error {
   readonly code: DomainErrorCode;

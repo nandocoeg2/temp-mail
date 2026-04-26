@@ -1,6 +1,13 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { z } from "zod";
+import {
+  attachmentObjectKey,
+  prepareAttachment,
+  type AttachmentScanner,
+  type AttachmentStorage
+} from "./attachments";
 import { DomainError } from "./domain-error";
+import { productionMetrics } from "./metrics";
 import { sanitizeEmailHtml, normalizeEmailText } from "./sanitize-email";
 import { createToken, hashBucket, hashToken, verifyToken } from "./tokens";
 import type {
@@ -13,7 +20,7 @@ import type {
   MessageSummary
 } from "./types";
 
-const MAILBOX_DURATION_MS = 10 * 60 * 1000;
+const MAILBOX_DURATION_MS = 60 * 60 * 1000;
 const RETENTION_DELAY_MS = 24 * 60 * 60 * 1000;
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 const MAX_TEXT_LENGTH = 100_000;
@@ -25,7 +32,17 @@ const inboundMessageSchema = z.object({
   to: z.string().email().max(320),
   subject: z.string().max(MAX_SUBJECT_LENGTH).default(""),
   text: z.string().max(MAX_TEXT_LENGTH).default(""),
-  html: z.string().max(MAX_TEXT_LENGTH).default("")
+  html: z.string().max(MAX_TEXT_LENGTH).default(""),
+  attachments: z
+    .array(
+      z.object({
+        filename: z.string().min(1).max(180),
+        contentType: z.string().min(1).max(120),
+        contentBase64: z.string().min(1)
+      })
+    )
+    .max(10)
+    .default([])
 });
 
 export type MailboxServiceOptions = {
@@ -33,6 +50,8 @@ export type MailboxServiceOptions = {
   clock: Clock;
   appDomain: string;
   createLimit?: number;
+  attachmentScanner?: AttachmentScanner;
+  attachmentStorage?: AttachmentStorage;
 };
 
 export type InboundMessageInput = z.input<typeof inboundMessageSchema>;
@@ -56,6 +75,7 @@ export function createMailboxService(options: MailboxServiceOptions) {
     };
 
     await options.repository.createMailbox(mailbox);
+    productionMetrics.mailboxCreated();
     return serializeMailbox(mailbox, token, options.clock.now());
   }
 
@@ -65,17 +85,8 @@ export function createMailboxService(options: MailboxServiceOptions) {
   }
 
   async function extendMailbox(id: string, token: string): Promise<MailboxSummary> {
-    const mailbox = await requireActiveMailbox(id, token);
-    const now = options.clock.now();
-    const base = Math.max(now.getTime(), mailbox.expiresAt.getTime());
-    const updated: MailboxRecord = {
-      ...mailbox,
-      expiresAt: new Date(base + MAILBOX_DURATION_MS),
-      lastExtendedAt: now
-    };
-
-    await options.repository.updateMailbox(updated);
-    return serializeMailbox(updated, token, options.clock.now());
+    await requireActiveMailbox(id, token);
+    throw new DomainError("EXTEND_DISABLED", "Mailbox extension is disabled in production", 410);
   }
 
   async function listMessages(id: string, token: string): Promise<MessageSummary[]> {
@@ -96,6 +107,7 @@ export function createMailboxService(options: MailboxServiceOptions) {
     if (!message) {
       throw new DomainError("MESSAGE_NOT_FOUND", "Message not found", 404);
     }
+    const attachments = await options.repository.listAttachments(message.id);
 
     return {
       id: message.id,
@@ -104,8 +116,36 @@ export function createMailboxService(options: MailboxServiceOptions) {
       subject: message.subject,
       receivedAt: message.receivedAt,
       textBody: message.textBody,
-      htmlBody: message.htmlBody
+      htmlBody: message.htmlBody,
+      attachments: attachments.map((attachment) => ({
+        id: attachment.id,
+        filename: attachment.filename,
+        contentType: attachment.contentType,
+        size: attachment.size,
+        scanStatus: attachment.scanStatus
+      }))
     };
+  }
+
+  async function createAttachmentDownloadUrl(
+    id: string,
+    token: string,
+    messageId: string,
+    attachmentId: string
+  ): Promise<{ url: string }> {
+    await requireActiveMailbox(id, token);
+    const message = await options.repository.findMessage(id, messageId);
+    if (!message) {
+      throw new DomainError("MESSAGE_NOT_FOUND", "Message not found", 404);
+    }
+    const attachment = await options.repository.findAttachment(message.id, attachmentId);
+    if (!attachment) {
+      throw new DomainError("ATTACHMENT_NOT_FOUND", "Attachment not found", 404);
+    }
+    if (attachment.scanStatus !== "clean" || !options.attachmentStorage) {
+      throw new DomainError("ATTACHMENT_UNAVAILABLE", "Attachment is not available for download", 409);
+    }
+    return { url: await options.attachmentStorage.createDownloadUrl(attachment.objectKey) };
   }
 
   async function storeInboundMessage(input: InboundMessageInput) {
@@ -117,11 +157,18 @@ export function createMailboxService(options: MailboxServiceOptions) {
     const mailbox = await options.repository.findMailboxByAddress(parsed.data.to.toLowerCase());
     if (!mailbox) {
       await recordInbound(parsed.data.to, parsed.data.from, "rejected", "unknown_mailbox");
+      productionMetrics.inboundRejected("unknown_mailbox");
       return { status: "rejected" as const, reason: "unknown_mailbox" as const };
     }
     if (statusOf(mailbox, options.clock.now()) === "expired") {
       await recordInbound(parsed.data.to, parsed.data.from, "rejected", "expired_mailbox");
+      productionMetrics.inboundRejected("expired_mailbox");
       return { status: "rejected" as const, reason: "expired_mailbox" as const };
+    }
+
+    const preparedAttachments = parsed.data.attachments.map(prepareAttachment);
+    if (preparedAttachments.length > 0 && (!options.attachmentScanner || !options.attachmentStorage)) {
+      throw new DomainError("ATTACHMENT_REJECTED", "Attachment scanning and storage are not configured", 503);
     }
 
     const message = {
@@ -136,14 +183,56 @@ export function createMailboxService(options: MailboxServiceOptions) {
       createdAt: options.clock.now()
     };
 
+    const attachmentRecords = [];
+    for (const attachment of preparedAttachments) {
+      const scan = await options.attachmentScanner!.scan(attachment);
+      productionMetrics.attachmentScanned(scan.status);
+      if (scan.status !== "clean") {
+        throw new DomainError("ATTACHMENT_REJECTED", "Attachment failed malware scan", 400);
+      }
+      const attachmentId = randomUUID();
+      const key = attachmentObjectKey(mailbox.id, message.id, attachmentId, attachment.filename);
+      const stored = await options.attachmentStorage!.put({
+        key,
+        filename: attachment.filename,
+        contentType: attachment.contentType,
+        bytes: attachment.bytes
+      });
+      attachmentRecords.push({
+        id: attachmentId,
+        messageId: message.id,
+        mailboxId: mailbox.id,
+        filename: attachment.filename,
+        contentType: attachment.contentType,
+        size: stored.size,
+        objectKey: stored.key,
+        scanStatus: "clean" as const,
+        scanSignature: null,
+        createdAt: options.clock.now()
+      });
+    }
+
     await options.repository.createMessage(message);
+    if (attachmentRecords.length > 0) {
+      await options.repository.createAttachments(attachmentRecords);
+    }
     await recordInbound(parsed.data.to, parsed.data.from, "accepted", null);
+    productionMetrics.inboundAccepted();
     return { status: "accepted" as const, messageId: message.id };
   }
 
   async function cleanupExpiredContent(): Promise<number> {
     const cutoff = new Date(options.clock.now().getTime() - RETENTION_DELAY_MS);
-    return options.repository.deleteMessagesForMailboxesExpiredBefore(cutoff);
+    if (options.attachmentStorage) {
+      const objectKeys =
+        await options.repository.listAttachmentObjectKeysForMailboxesExpiredBefore(cutoff);
+      if (objectKeys.length > 0) {
+        await options.attachmentStorage.deleteMany(objectKeys);
+      }
+    }
+    const deleted = await options.repository.deleteMessagesForMailboxesExpiredBefore(cutoff);
+    productionMetrics.cleanupDeleted(deleted);
+    return deleted;
   }
 
   async function adminMetrics() {
@@ -187,6 +276,7 @@ export function createMailboxService(options: MailboxServiceOptions) {
       createdAt: options.clock.now()
     });
     if (recent >= createLimit) {
+      productionMetrics.rateLimited(CREATE_MAILBOX_ACTION);
       throw new DomainError("RATE_LIMITED", "Too many mailbox requests. Try again later.", 429);
     }
   }
@@ -224,6 +314,7 @@ export function createMailboxService(options: MailboxServiceOptions) {
     extendMailbox,
     listMessages,
     getMessage,
+    createAttachmentDownloadUrl,
     storeInboundMessage,
     cleanupExpiredContent,
     adminMetrics

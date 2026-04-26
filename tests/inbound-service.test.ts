@@ -37,7 +37,7 @@ describe("inbound email flow", () => {
       appDomain: "dropmail.test"
     });
     const mailbox = await service.createMailbox("203.0.113.10");
-    advanceClock(clock, 11 * 60 * 1000);
+    advanceClock(clock, 61 * 60 * 1000);
 
     const result = await service.storeInboundMessage({
       from: "sender@example.com",

@@ -1,4 +1,5 @@
 import type {
+  AttachmentRecord,
   Clock,
   InboundEventRecord,
   MailboxRecord,
@@ -10,6 +11,7 @@ import type {
 export function createInMemoryRepository(clock: Clock): MailboxRepository {
   const mailboxes = new Map<string, MailboxRecord>();
   const messages = new Map<string, MessageRecord>();
+  const attachments = new Map<string, AttachmentRecord>();
   const inboundEvents: InboundEventRecord[] = [];
   const rateLimitEvents: RateLimitEventRecord[] = [];
 
@@ -36,6 +38,11 @@ export function createInMemoryRepository(clock: Clock): MailboxRepository {
         mailboxes.set(mailbox.id, mailbox);
       }
     },
+    async createAttachments(records) {
+      for (const attachment of records) {
+        attachments.set(attachment.id, cloneAttachment(attachment));
+      }
+    },
     async listMessages(mailboxId) {
       return [...messages.values()]
         .filter((message) => message.mailboxId === mailboxId)
@@ -45,6 +52,26 @@ export function createInMemoryRepository(clock: Clock): MailboxRepository {
     async findMessage(mailboxId, messageId) {
       const message = messages.get(messageId);
       return message?.mailboxId === mailboxId ? cloneMessage(message) : null;
+    },
+    async listAttachments(messageId) {
+      return [...attachments.values()]
+        .filter((attachment) => attachment.messageId === messageId)
+        .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime())
+        .map(cloneAttachment);
+    },
+    async findAttachment(messageId, attachmentId) {
+      const attachment = attachments.get(attachmentId);
+      return attachment?.messageId === messageId ? cloneAttachment(attachment) : null;
+    },
+    async listAttachmentObjectKeysForMailboxesExpiredBefore(cutoff) {
+      const expiredMailboxIds = new Set(
+        [...mailboxes.values()]
+          .filter((mailbox) => mailbox.expiresAt <= cutoff)
+          .map((mailbox) => mailbox.id)
+      );
+      return [...attachments.values()]
+        .filter((attachment) => expiredMailboxIds.has(attachment.mailboxId))
+        .map((attachment) => attachment.objectKey);
     },
     async deleteMessagesForMailboxesExpiredBefore(cutoff) {
       const expiredMailboxIds = new Set(
@@ -56,6 +83,11 @@ export function createInMemoryRepository(clock: Clock): MailboxRepository {
       for (const [id, message] of messages.entries()) {
         if (expiredMailboxIds.has(message.mailboxId)) {
           messages.delete(id);
+          for (const [attachmentId, attachment] of attachments.entries()) {
+            if (attachment.messageId === message.id) {
+              attachments.delete(attachmentId);
+            }
+          }
           deleted += 1;
         }
       }
@@ -107,5 +139,12 @@ function cloneMessage(message: MessageRecord): MessageRecord {
     ...message,
     receivedAt: new Date(message.receivedAt),
     createdAt: new Date(message.createdAt)
+  };
+}
+
+function cloneAttachment(attachment: AttachmentRecord): AttachmentRecord {
+  return {
+    ...attachment,
+    createdAt: new Date(attachment.createdAt)
   };
 }

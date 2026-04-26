@@ -1,0 +1,105 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Domain {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @unique
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  mailboxes Mailbox[]
+
+  @@map("domains")
+}
+
+model Mailbox {
+  id             String    @id @default(uuid()) @db.Uuid
+  address        String    @unique
+  tokenHash      String    @map("token_hash")
+  expiresAt      DateTime  @map("expires_at") @db.Timestamptz(6)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  lastExtendedAt DateTime? @map("last_extended_at") @db.Timestamptz(6)
+  messageCount   Int       @default(0) @map("message_count")
+  domainId       String?   @map("domain_id") @db.Uuid
+
+  domain      Domain?      @relation(fields: [domainId], references: [id])
+  messages    Message[]
+  attachments Attachment[]
+
+  @@index([address])
+  @@index([expiresAt])
+  @@map("mailboxes")
+}
+
+model Message {
+  id         String   @id @default(uuid()) @db.Uuid
+  mailboxId  String   @map("mailbox_id") @db.Uuid
+  sender     String
+  recipient  String
+  subject    String
+  textBody   String   @map("text_body")
+  htmlBody   String   @map("html_body")
+  receivedAt DateTime @map("received_at") @db.Timestamptz(6)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  mailbox     Mailbox      @relation(fields: [mailboxId], references: [id], onDelete: Cascade)
+  attachments Attachment[]
+
+  @@index([mailboxId])
+  @@map("messages")
+}
+
+model Attachment {
+  id            String   @id @default(uuid()) @db.Uuid
+  messageId     String   @map("message_id") @db.Uuid
+  mailboxId     String   @map("mailbox_id") @db.Uuid
+  filename      String
+  contentType   String   @map("content_type")
+  size          Int
+  objectKey     String   @map("object_key")
+  scanStatus    String   @map("scan_status")
+  scanSignature String?  @map("scan_signature")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  mailbox Mailbox @relation(fields: [mailboxId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+  @@index([mailboxId])
+  @@map("attachments")
+}
+
+model InboundEvent {
+  id         String   @id @default(uuid()) @db.Uuid
+  recipient  String
+  sender     String
+  status     String
+  reason     String?
+  receivedAt DateTime @default(now()) @map("received_at") @db.Timestamptz(6)
+
+  @@map("inbound_events")
+}
+
+model RateLimitEvent {
+  id        String   @id @default(uuid()) @db.Uuid
+  bucket    String
+  action    String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([bucket, action, createdAt])
+  @@map("rate_limit_events")
+}
+
+model AdminSession {
+  id        String   @id @default(uuid()) @db.Uuid
+  tokenHash String   @map("token_hash")
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("admin_sessions")
+}

@@ -389,6 +389,50 @@ a {
   line-height: 1.6;
 }
 
+.attachment-list {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  padding: 14px 20px 20px;
+}
+
+.attachment-heading,
+.attachment-row {
+  display: flex;
+  align-items: center;
+}
+
+.attachment-heading {
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.attachment-row {
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 12px;
+}
+
+.attachment-row div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.attachment-row strong,
+.attachment-row span {
+  overflow-wrap: anywhere;
+}
+
+.attachment-row span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .text-body {
   white-space: pre-wrap;
   font-family: Arial, Helvetica, sans-serif;

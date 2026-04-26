@@ -26,6 +26,21 @@ export type MessageRecord = {
   createdAt: Date;
 };
 
+export type AttachmentScanStatus = "clean" | "infected";
+
+export type AttachmentRecord = {
+  id: string;
+  messageId: string;
+  mailboxId: string;
+  filename: string;
+  contentType: string;
+  size: number;
+  objectKey: string;
+  scanStatus: AttachmentScanStatus;
+  scanSignature: string | null;
+  createdAt: Date;
+};
+
 export type InboundEventRecord = {
   id: string;
   recipient: string;
@@ -48,8 +63,12 @@ export type MailboxRepository = {
   findMailboxByAddress: (address: string) => Promise<MailboxRecord | null>;
   updateMailbox: (mailbox: MailboxRecord) => Promise<void>;
   createMessage: (message: MessageRecord) => Promise<void>;
+  createAttachments: (attachments: AttachmentRecord[]) => Promise<void>;
   listMessages: (mailboxId: string) => Promise<MessageRecord[]>;
   findMessage: (mailboxId: string, messageId: string) => Promise<MessageRecord | null>;
+  listAttachments: (messageId: string) => Promise<AttachmentRecord[]>;
+  findAttachment: (messageId: string, attachmentId: string) => Promise<AttachmentRecord | null>;
+  listAttachmentObjectKeysForMailboxesExpiredBefore: (cutoff: Date) => Promise<string[]>;
   deleteMessagesForMailboxesExpiredBefore: (cutoff: Date) => Promise<number>;
   recordInboundEvent: (event: InboundEventRecord) => Promise<void>;
   listInboundEvents: (limit: number) => Promise<InboundEventRecord[]>;
@@ -79,4 +98,13 @@ export type MessageSummary = {
 export type MessageDetail = MessageSummary & {
   textBody: string;
   htmlBody: string;
+  attachments: AttachmentSummary[];
+};
+
+export type AttachmentSummary = {
+  id: string;
+  filename: string;
+  contentType: string;
+  size: number;
+  scanStatus: AttachmentScanStatus;
 };

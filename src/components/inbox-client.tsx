@@ -7,14 +7,15 @@ import {
   AlertTriangle,
   Clock3,
   Copy,
+  Download,
   ExternalLink,
   Inbox,
   Link2,
   Loader2,
   Mail,
+  Paperclip,
   RefreshCw,
-  ShieldAlert,
-  TimerReset
+  ShieldAlert
 } from "lucide-react";
 
 (globalThis as typeof globalThis & { React?: typeof React }).React ??= React;
@@ -41,6 +42,15 @@ export type InboxMessage = {
   sanitizedHtml?: string;
   links?: string[];
   otp?: string;
+  attachments?: InboxAttachment[];
+};
+
+export type InboxAttachment = {
+  id: string;
+  filename: string;
+  contentType: string;
+  size: number;
+  scanStatus: "clean" | "infected";
 };
 
 type InboxClientProps = {
@@ -167,6 +177,7 @@ export function InboxClient({ initialMailbox, initialMessages = [] }: InboxClien
           receivedAt: string;
           textBody: string;
           htmlBody: string;
+          attachments?: InboxAttachment[];
         };
         setMessages((current) =>
           current.map((message) =>
@@ -176,7 +187,8 @@ export function InboxClient({ initialMailbox, initialMessages = [] }: InboxClien
                   recipient: detail.recipient,
                   bodyText: detail.textBody,
                   bodyHtml: detail.htmlBody,
-                  sanitizedHtml: detail.htmlBody
+                  sanitizedHtml: detail.htmlBody,
+                  attachments: detail.attachments ?? []
                 }
               : message
           )
@@ -188,33 +200,32 @@ export function InboxClient({ initialMailbox, initialMessages = [] }: InboxClien
     [mailbox.id, mailbox.token, messages]
   );
 
-  const extendMailbox = useCallback(async () => {
-    if (!mailbox.id || mailbox.id === "local-pending") return;
-    setUiState("loading");
-    try {
-      const response = await fetch(`/api/mailboxes/${encodeURIComponent(mailbox.id)}/extend`, {
-        method: "POST",
-        headers: mailbox.token ? { Authorization: `Bearer ${mailbox.token}` } : undefined
-      });
-      if (response.status === 429) {
-        setUiState("rate_limited");
-        return;
-      }
-      if (!response.ok) throw new Error("Extend failed");
-      const payload = (await response.json()) as { mailbox?: Mailbox } & Partial<Mailbox>;
-      setMailbox((current) => ({ ...current, ...(payload.mailbox ?? payload), status: "active" }));
-      setUiState("idle");
-    } catch {
-      setUiState("error");
-    }
-  }, [mailbox.id, mailbox.token]);
-
   const copyValue = useCallback(async (value: string, label: string) => {
     if (!value) return;
     await navigator.clipboard?.writeText(value);
     setNotice(`${label} copied`);
     window.setTimeout(() => setNotice(""), 1800);
   }, []);
+
+  const downloadAttachment = useCallback(
+    async (messageId: string, attachment: InboxAttachment) => {
+      try {
+        const response = await fetch(
+          `/api/mailboxes/${encodeURIComponent(mailbox.id)}/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachment.id)}`,
+          {
+            method: "POST",
+            headers: mailbox.token ? { Authorization: `Bearer ${mailbox.token}` } : undefined
+          }
+        );
+        if (!response.ok) throw new Error("Attachment download failed");
+        const payload = (await response.json()) as { url: string };
+        window.open(payload.url, "_blank", "noopener,noreferrer");
+      } catch {
+        setUiState("error");
+      }
+    },
+    [mailbox.id, mailbox.token]
+  );
 
   useEffect(() => {
     const interval = window.setInterval(() => setNowTick(Date.now()), 1000);
@@ -250,10 +261,6 @@ export function InboxClient({ initialMailbox, initialMessages = [] }: InboxClien
           </span>
           <button className="icon-button" type="button" onClick={() => copyValue(mailbox.address, "Address")} aria-label="Copy address">
             <Copy aria-hidden="true" size={18} />
-          </button>
-          <button className="text-button" type="button" onClick={extendMailbox} disabled={expired || rateLimited}>
-            <TimerReset aria-hidden="true" size={17} />
-            Extend
           </button>
           <button className="icon-button" type="button" onClick={refreshInbox} disabled={expired} aria-label="Refresh inbox">
             <RefreshCw aria-hidden="true" size={18} className={uiState === "loading" ? "spin" : ""} />
@@ -339,6 +346,10 @@ export function InboxClient({ initialMailbox, initialMessages = [] }: InboxClien
                 ) : null}
               </div>
               <MessageBody message={selectedMessage} />
+              <AttachmentList
+                message={selectedMessage}
+                onDownload={(attachment) => downloadAttachment(selectedMessage.id, attachment)}
+              />
             </>
           ) : (
             <div className="empty-state detail-empty">
@@ -365,6 +376,46 @@ function StateBanner({ tone, icon, title, text }: { tone: "danger" | "warning"; 
   );
 }
 
+function AttachmentList({
+  message,
+  onDownload
+}: {
+  message: InboxMessage;
+  onDownload: (attachment: InboxAttachment) => void;
+}) {
+  const attachments = message.attachments ?? [];
+  if (attachments.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="attachment-list" aria-label="Attachments">
+      <div className="attachment-heading">
+        <Paperclip aria-hidden="true" size={16} />
+        <strong>Attachments</strong>
+      </div>
+      {attachments.map((attachment) => (
+        <div className="attachment-row" key={attachment.id}>
+          <div>
+            <strong>{attachment.filename}</strong>
+            <span>{formatAttachmentMeta(attachment)}</span>
+          </div>
+          <button
+            className="text-button"
+            type="button"
+            onClick={() => onDownload(attachment)}
+            disabled={attachment.scanStatus !== "clean"}
+            aria-label={`Download ${attachment.filename}`}
+          >
+            <Download aria-hidden="true" size={16} />
+            Download
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function MessageBody({ message }: { message: InboxMessage }) {
   const html = message.sanitizedHtml ?? message.bodyHtml;
 
@@ -373,4 +424,12 @@ function MessageBody({ message }: { message: InboxMessage }) {
   }
 
   return <pre className="message-body text-body">{message.bodyText || message.preview || "This message has no readable body."}</pre>;
+}
+
+function formatAttachmentMeta(attachment: InboxAttachment): string {
+  const size =
+    attachment.size >= 1024 * 1024
+      ? `${(attachment.size / (1024 * 1024)).toFixed(1)} MB`
+      : `${Math.max(1, Math.ceil(attachment.size / 1024))} KB`;
+  return `${attachment.contentType} - ${size} - ${attachment.scanStatus}`;
 }

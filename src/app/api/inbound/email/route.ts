@@ -1,17 +1,26 @@
 import { z } from "zod";
 import { DomainError } from "@/lib/server/domain-error";
 import { verifyInboundSignature } from "@/lib/server/inbound-signature";
+import { MAX_INBOUND_PAYLOAD_BYTES } from "@/lib/server/inbound-limits";
 import { jsonError, jsonOk } from "@/lib/server/http";
 import { getMailboxService } from "@/lib/server/service-provider";
-
-const MAX_PAYLOAD_BYTES = 256 * 1024;
 
 const inboundRequestSchema = z.object({
   from: z.string(),
   to: z.string(),
   subject: z.string().optional().default(""),
   text: z.string().optional().default(""),
-  html: z.string().optional().default("")
+  html: z.string().optional().default(""),
+  attachments: z
+    .array(
+      z.object({
+        filename: z.string(),
+        contentType: z.string(),
+        contentBase64: z.string()
+      })
+    )
+    .optional()
+    .default([])
 });
 
 export async function POST(request: Request) {
@@ -22,7 +31,7 @@ export async function POST(request: Request) {
     }
 
     const payload = await request.text();
-    if (Buffer.byteLength(payload, "utf8") > MAX_PAYLOAD_BYTES) {
+    if (Buffer.byteLength(payload, "utf8") > MAX_INBOUND_PAYLOAD_BYTES) {
       throw new DomainError("PAYLOAD_TOO_LARGE", "Inbound email payload is too large", 413);
     }
 

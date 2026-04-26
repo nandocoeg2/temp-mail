@@ -1,0 +1,1 @@
+export const MAX_INBOUND_PAYLOAD_BYTES = 8 * 1024 * 1024;
