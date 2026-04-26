@@ -17,8 +17,8 @@ export function createMetrics() {
   }
 
   return {
-    mailboxCreated: () => counter("dropmail_mailbox_created_total", "Mailboxes created"),
-    inboundAccepted: () => counter("dropmail_inbound_accepted_total", "Inbound emails accepted"),
+    mailboxCreated: (domain?: string) => counter("dropmail_mailbox_created_total", "Mailboxes created", 1, domain ? { domain } : {}),
+    inboundAccepted: (domain?: string) => counter("dropmail_inbound_accepted_total", "Inbound emails accepted", 1, domain ? { domain } : {}),
     inboundRejected: (reason: string) =>
       counter("dropmail_inbound_rejected_total", "Inbound emails rejected", 1, { reason }),
     rateLimited: (action: string) =>

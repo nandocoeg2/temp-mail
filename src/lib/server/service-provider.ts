@@ -20,8 +20,8 @@ export function getMailboxService() {
   return createMailboxService({
     repository: getRepository(),
     clock: systemClock,
-    appDomain: process.env.APP_DOMAIN || "dropmail.local",
-    attachmentScanner: createClamAvScanner(),
+    appDomains: (process.env.APP_DOMAINS || process.env.APP_DOMAIN || "dropmail.local").split(",").map(d => d.trim()).filter(Boolean),
+    attachmentScanner: process.env.CLAMAV_HOST ? createClamAvScanner() : undefined,
     attachmentStorage: hasObjectStorageEnv() ? createS3AttachmentStorage() : undefined
   });
 }

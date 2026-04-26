@@ -14,6 +14,19 @@ export function createS3AttachmentStorage(): AttachmentStorage {
     }
   });
 
+  const publicEndpoint = process.env.S3_PUBLIC_ENDPOINT;
+  const downloadClient = publicEndpoint
+    ? new S3Client({
+        region: process.env.S3_REGION || "us-east-1",
+        endpoint: publicEndpoint,
+        forcePathStyle: process.env.S3_FORCE_PATH_STYLE !== "false",
+        credentials: {
+          accessKeyId: requiredEnv("S3_ACCESS_KEY_ID"),
+          secretAccessKey: requiredEnv("S3_SECRET_ACCESS_KEY")
+        }
+      })
+    : client;
+
   return {
     async put(input) {
       await client.send(
@@ -31,7 +44,7 @@ export function createS3AttachmentStorage(): AttachmentStorage {
     },
     async createDownloadUrl(key) {
       return getSignedUrl(
-        client,
+        downloadClient,
         new GetObjectCommand({
           Bucket: bucket,
           Key: key

@@ -48,7 +48,7 @@ const inboundMessageSchema = z.object({
 export type MailboxServiceOptions = {
   repository: MailboxRepository;
   clock: Clock;
-  appDomain: string;
+  appDomains: string[];
   createLimit?: number;
   attachmentScanner?: AttachmentScanner;
   attachmentStorage?: AttachmentStorage;
@@ -75,7 +75,7 @@ export function createMailboxService(options: MailboxServiceOptions) {
     };
 
     await options.repository.createMailbox(mailbox);
-    productionMetrics.mailboxCreated();
+    productionMetrics.mailboxCreated(mailbox.address.split("@")[1]);
     return serializeMailbox(mailbox, token, options.clock.now());
   }
 
@@ -167,9 +167,6 @@ export function createMailboxService(options: MailboxServiceOptions) {
     }
 
     const preparedAttachments = parsed.data.attachments.map(prepareAttachment);
-    if (preparedAttachments.length > 0 && (!options.attachmentScanner || !options.attachmentStorage)) {
-      throw new DomainError("ATTACHMENT_REJECTED", "Attachment scanning and storage are not configured", 503);
-    }
 
     const message = {
       id: randomUUID(),
@@ -184,32 +181,36 @@ export function createMailboxService(options: MailboxServiceOptions) {
     };
 
     const attachmentRecords = [];
-    for (const attachment of preparedAttachments) {
-      const scan = await options.attachmentScanner!.scan(attachment);
-      productionMetrics.attachmentScanned(scan.status);
-      if (scan.status !== "clean") {
-        throw new DomainError("ATTACHMENT_REJECTED", "Attachment failed malware scan", 400);
+    if (preparedAttachments.length > 0 && options.attachmentStorage) {
+      for (const attachment of preparedAttachments) {
+        if (options.attachmentScanner) {
+          const scan = await options.attachmentScanner.scan(attachment);
+          productionMetrics.attachmentScanned(scan.status);
+          if (scan.status !== "clean") {
+            throw new DomainError("ATTACHMENT_REJECTED", "Attachment failed malware scan", 400);
+          }
+        }
+        const attachmentId = randomUUID();
+        const key = attachmentObjectKey(mailbox.id, message.id, attachmentId, attachment.filename);
+        const stored = await options.attachmentStorage.put({
+          key,
+          filename: attachment.filename,
+          contentType: attachment.contentType,
+          bytes: attachment.bytes
+        });
+        attachmentRecords.push({
+          id: attachmentId,
+          messageId: message.id,
+          mailboxId: mailbox.id,
+          filename: attachment.filename,
+          contentType: attachment.contentType,
+          size: stored.size,
+          objectKey: stored.key,
+          scanStatus: options.attachmentScanner ? "clean" as const : "skipped" as const,
+          scanSignature: null,
+          createdAt: options.clock.now()
+        });
       }
-      const attachmentId = randomUUID();
-      const key = attachmentObjectKey(mailbox.id, message.id, attachmentId, attachment.filename);
-      const stored = await options.attachmentStorage!.put({
-        key,
-        filename: attachment.filename,
-        contentType: attachment.contentType,
-        bytes: attachment.bytes
-      });
-      attachmentRecords.push({
-        id: attachmentId,
-        messageId: message.id,
-        mailboxId: mailbox.id,
-        filename: attachment.filename,
-        contentType: attachment.contentType,
-        size: stored.size,
-        objectKey: stored.key,
-        scanStatus: "clean" as const,
-        scanSignature: null,
-        createdAt: options.clock.now()
-      });
     }
 
     await options.repository.createMessage(message);
@@ -217,7 +218,7 @@ export function createMailboxService(options: MailboxServiceOptions) {
       await options.repository.createAttachments(attachmentRecords);
     }
     await recordInbound(parsed.data.to, parsed.data.from, "accepted", null);
-    productionMetrics.inboundAccepted();
+    productionMetrics.inboundAccepted(parsed.data.to.split("@")[1]);
     return { status: "accepted" as const, messageId: message.id };
   }
 
@@ -284,7 +285,8 @@ export function createMailboxService(options: MailboxServiceOptions) {
   async function createUniqueAddress(): Promise<string> {
     for (let attempt = 0; attempt < 8; attempt += 1) {
       const localPart = randomBytes(5).toString("hex");
-      const address = `${localPart}@${options.appDomain}`.toLowerCase();
+      const domain = options.appDomains[Math.floor(Math.random() * options.appDomains.length)];
+      const address = `${localPart}@${domain}`.toLowerCase();
       if (!(await options.repository.findMailboxByAddress(address))) {
         return address;
       }

@@ -26,7 +26,7 @@ export type MessageRecord = {
   createdAt: Date;
 };
 
-export type AttachmentScanStatus = "clean" | "infected";
+export type AttachmentScanStatus = "clean" | "infected" | "skipped";
 
 export type AttachmentRecord = {
   id: string;
