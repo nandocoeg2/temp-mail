@@ -1,0 +1,44 @@
+name: Test Self-Hosted Runner
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  test-pi-runner:
+    runs-on: [self-hosted, raspberry-pi]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: System info
+        run: |
+          echo "🖥️ Runner info:"
+          uname -a
+          echo ""
+          echo "💾 Memory:"
+          free -h
+          echo ""
+          echo "💿 Disk:"
+          df -h /
+          echo ""
+          echo "🐳 Docker:"
+          docker --version
+          echo ""
+          echo "📦 Node:"
+          node --version
+          npm --version
+      
+      - name: Test Docker
+        run: |
+          # Skip docker pull test karena IPv6 issue
+          docker ps
+          echo "✅ Docker daemon running"
+      
+      - name: Success
+        run: |
+          echo "✅ Self-hosted runner di Raspberry Pi berfungsi!"
