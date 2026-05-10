@@ -69,7 +69,8 @@ jobs:
       
       - name: Pull latest image
         run: |
-          docker pull ${{ needs.build.outputs.image-tag }}
+          # Use main tag (stable)
+          docker pull ghcr.io/nandocoeg2/temp-mail:main
       
       - name: Stop and remove old container
         run: |
@@ -83,8 +84,8 @@ jobs:
           cp docker-compose.yml docker-compose.yml.backup
           
           # Update image tag in compose file
-          sed -i "s|image:.*temp-mail.*|image: ${{ needs.build.outputs.image-tag }}|g" docker-compose.yml || \
-          sed -i "s|build:.*|image: ${{ needs.build.outputs.image-tag }}|g" docker-compose.yml
+          sed -i "s|image:.*temp-mail.*|image: ghcr.io/nandocoeg2/temp-mail:main|g" docker-compose.yml || \
+          sed -i "s|build:.*|image: ghcr.io/nandocoeg2/temp-mail:main|g" docker-compose.yml
       
       - name: Start new container
         run: |
