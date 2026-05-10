@@ -83,13 +83,19 @@ jobs:
           # Backup current compose file
           cp docker-compose.yml docker-compose.yml.backup
           
-          # Update image tag in compose file
-          sed -i "s|image:.*temp-mail.*|image: ghcr.io/nandocoeg2/temp-mail:main|g" docker-compose.yml || \
-          sed -i "s|build:.*|image: ghcr.io/nandocoeg2/temp-mail:main|g" docker-compose.yml
+          # Set environment variable for image
+          echo "DROPMAIL_IMAGE=ghcr.io/nandocoeg2/temp-mail:main" > .env.deploy
+          
+          # Or update the default in compose file
+          sed -i "s|DROPMAIL_IMAGE:-.*}|DROPMAIL_IMAGE:-ghcr.io/nandocoeg2/temp-mail:main}|g" docker-compose.yml
       
       - name: Start new container
         run: |
           cd /opt/temp-mail
+          # Use env file if exists
+          if [ -f .env.deploy ]; then
+            export $(cat .env.deploy | xargs)
+          fi
           docker compose up -d app
       
       - name: Wait for health check
